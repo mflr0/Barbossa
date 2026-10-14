@@ -1,0 +1,23 @@
+{
+  "name": "barbossa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bot Discord d'administration et d'automod propulsé par Claude",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "discord.js": "^14.27.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}
