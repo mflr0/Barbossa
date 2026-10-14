@@ -33,6 +33,8 @@ export interface ToolContext {
   guild: Guild;
   member: GuildMember;
   confirm: (question: string) => Promise<boolean>;
+  // Rempli par le code à chaque action réellement exécutée : sert de reçu sous la réponse de l'IA.
+  actions?: string[];
 }
 
 const snowflake = z
@@ -96,6 +98,9 @@ const REQUIRED: Record<string, bigint> = {
   ban_member: PermissionFlagsBits.BanMembers,
   rename_member: PermissionFlagsBits.ManageNicknames,
   send_message: PermissionFlagsBits.ManageMessages,
+  read_message: PermissionFlagsBits.ManageMessages,
+  edit_message: PermissionFlagsBits.ManageMessages,
+  delete_message: PermissionFlagsBits.ManageMessages,
   create_event: PermissionFlagsBits.ManageEvents,
 };
 
@@ -107,7 +112,7 @@ const ABILITIES: [bigint, string][] = [
   [PermissionFlagsBits.ManageNicknames, "renommer"],
   [PermissionFlagsBits.ManageRoles, "gérer les rôles et les permissions des salons"],
   [PermissionFlagsBits.ManageChannels, "gérer les salons"],
-  [PermissionFlagsBits.ManageMessages, "publier des messages"],
+  [PermissionFlagsBits.ManageMessages, "publier des messages, et modifier ou supprimer ceux du bot"],
   [PermissionFlagsBits.ManageEvents, "créer des événements"],
 ];
 
@@ -119,7 +124,7 @@ export function describeAbilities(member: GuildMember): string {
 // Les permissions qui donnent accès au « cerveau » avec au moins un outil.
 export const STAFF_PERMISSIONS = [...new Set(Object.values(REQUIRED)), PermissionFlagsBits.Administrator];
 
-export function buildTools({ guild, member, confirm }: ToolContext): Tool[] {
+export function buildTools({ guild, member, confirm, actions }: ToolContext): Tool[] {
   const user = member.user;
   const reason = `Ordre de ${user.tag} via le bot`;
 
@@ -154,8 +159,21 @@ export function buildTools({ guild, member, confirm }: ToolContext): Tool[] {
   };
   // Chaque action (ou annulation) est journalisée dans la console et le salon de logs.
   const done = async (text: string, by?: string) => {
+    actions?.push(text.split("\n")[0]!);
     await log(guild, "Action", `🛠️ ${text} (demandé par ${user})${by ? provider(by) : ""}`);
     return text;
+  };
+
+  // Un message publié par le bot : le dernier du salon si aucun id n'est donné.
+  const fetchOwnMessage = async (channelId: string, messageId: string) => {
+    const { channel } = await fetchChannel(channelId, [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory]);
+    if (!channel.isTextBased()) throw new Error("Ce salon ne contient pas de messages.");
+    const message = messageId
+      ? await channel.messages.fetch(messageId).catch(() => null)
+      : (await channel.messages.fetch({ limit: 50 })).find((m) => m.author.id === guild.client.user.id);
+    if (!message) throw new Error("Message introuvable dans ce salon.");
+    if (message.author.id !== guild.client.user.id) throw new Error("Ce message n'a pas été publié par le bot : je ne peux modifier que les miens.");
+    return message;
   };
 
   const tools: Tool[] = [
@@ -450,6 +468,38 @@ Pour @everyone, target_id vaut ${guild.id}. Ne renseigne que les permissions qui
       },
     }),
 
+    tool({
+      name: "read_message",
+      description:
+        "Lit un message que tu as publié (son id et son texte exact), pour pouvoir le modifier ou le supprimer. message_id vide : ton dernier message dans ce salon.",
+      inputSchema: z.object({ channel_id: snowflake, message_id: z.string().describe("Id du message, ou vide pour ton dernier message du salon") }),
+      run: async ({ channel_id, message_id }) => {
+        const message = await fetchOwnMessage(channel_id, message_id);
+        return `Message ${message.id} (${message.url}) :\n${message.content}`;
+      },
+    }),
+    tool({
+      name: "edit_message",
+      description:
+        "Modifie un message que tu as publié. Lis-le d'abord avec read_message, puis donne le texte complet corrigé (tout le message, pas seulement la partie changée).",
+      inputSchema: z.object({ channel_id: snowflake, message_id: snowflake, content: z.string().min(1).max(2000) }),
+      run: async ({ channel_id, message_id, content }) => {
+        const message = await fetchOwnMessage(channel_id, message_id);
+        await message.edit({ content, allowedMentions: { parse: [] } });
+        return done(`Message modifié : ${message.url}`);
+      },
+    }),
+    tool({
+      name: "delete_message",
+      description: "Supprime un message que tu as publié (demande confirmation). message_id vide : ton dernier message dans ce salon.",
+      inputSchema: z.object({ channel_id: snowflake, message_id: z.string().describe("Id du message, ou vide pour ton dernier message du salon") }),
+      run: async ({ channel_id, message_id }) => {
+        const message = await fetchOwnMessage(channel_id, message_id);
+        if (!(await confirm(`Supprimer ton message dans <#${channel_id}> (« ${message.content.slice(0, 80)}… ») ?`))) return "Suppression annulée.";
+        await message.delete();
+        return done(`Message supprimé dans <#${channel_id}>`);
+      },
+    }),
     tool({
       name: "create_event",
       description:

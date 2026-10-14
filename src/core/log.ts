@@ -9,14 +9,6 @@ const PRICES: Record<string, [number, number]> = {
   "claude-opus-5-5": [4, 20],
   "gpt-6-luna": [0.1, 0.5],
   "gemini-3.5-flash-lite": [0.3, 2.5],
-};
-
-// Coût cumulé par usage depuis le démarrage, pour les plafonds de dépense (ex. discussion avec les membres).
-const spent = new Map<string, number>();
-
-export function spentFor(scope: string): number {
-  return spent.get(scope) ?? 0;
-}
 
 export function logConsole(scope: string, text: string): void {
   console.log(`[${new Date().toLocaleString("fr-FR")}] [${scope}] ${text.replaceAll("\n", " | ")}`);
