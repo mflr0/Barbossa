@@ -6,7 +6,7 @@ import {
   type ChatInputCommandInteraction,
   type GuildMember,
 } from "discord.js";
-import { log } from "./log.ts";
+import { log } from "../core/log.ts";
 
 // Commandes de modération classiques, sans IA. Les bans et débans sont journalisés par audit.ts.
 export const classicCommands = [
@@ -56,7 +56,7 @@ export const classicCommands = [
 
 // Le bot est plus haut que la plupart des membres : on vérifie que l'auteur de la commande
 // est lui-même au-dessus de sa cible, sinon un modérateur pourrait sanctionner un supérieur via le bot.
-function outranks(executor: GuildMember, target: GuildMember): boolean {
+export function outranks(executor: GuildMember, target: GuildMember): boolean {
   if (executor.id === executor.guild.ownerId) return true;
   if (target.id === target.guild.ownerId) return false;
   return executor.roles.highest.comparePositionTo(target.roles.highest) > 0;

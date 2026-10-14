@@ -1,3 +1,12 @@
+# Dépendances
 node_modules/
+
+# Secrets (tokens, clés d'API)
 .env
+
+# Données de chaque serveur : mémoire, personnalité, règles, accords des membres
 memoire/
+
+# Système et éditeurs
+.DS_Store
+*.log
